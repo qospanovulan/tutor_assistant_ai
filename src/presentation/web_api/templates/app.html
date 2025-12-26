@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Tutor Chat{% endblock %}
+
+{% block content %}
+<div class="h-screen flex">
+
+  <!-- Sidebar -->
+  <aside class="w-80 shrink-0 bg-zinc-950 border-r border-zinc-800 flex flex-col">
+    <div class="p-4 border-b border-zinc-800">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <div class="text-sm text-zinc-400">Student</div>
+          <div class="font-semibold">{{ student_name }} • Grade {{ grade }}</div>
+        </div>
+        <a href="/logout" class="text-zinc-400 hover:text-zinc-200 text-sm">Logout</a>
+      </div>
+
+      <button
+        class="mt-4 w-full rounded-xl bg-white text-zinc-900 font-semibold py-2.5 hover:bg-zinc-200 transition"
+        hx-post="/chat/new"
+        hx-swap="none"
+      >
+        + New chat
+      </button>
+    </div>
+
+    <div
+      id="chats-list"
+      class="p-2 overflow-y-auto"
+      hx-get="/partials/chats?current_chat_id={{ current_chat_id or '' }}"
+      hx-trigger="load, refresh-chats from:body"
+      hx-swap="innerHTML"
+    >
+      <!-- chats partial loads here -->
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 bg-zinc-950">
+    <div class="h-full flex flex-col">
+
+      <!-- Header -->
+      <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+        <div class="font-semibold">Tutor Assistant</div>
+        <div class="text-sm text-zinc-400">Buttons-only flow</div>
+      </div>
+
+      <!-- Chat container -->
+      <div class="flex-1 overflow-hidden">
+        <div
+          id="chat-pane-wrapper"
+          class="h-full"
+          {% if current_chat_id %}
+            hx-get="/partials/chat/{{ current_chat_id }}"
+            hx-trigger="load"
+            hx-swap="innerHTML"
+          {% endif %}
+        >
+          {% if not current_chat_id %}
+            <div class="h-full flex items-center justify-center text-zinc-400">
+              Create a new chat to start.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+</div>
+{% endblock %}

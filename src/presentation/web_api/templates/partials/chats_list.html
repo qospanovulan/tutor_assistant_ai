@@ -1,0 +1,22 @@
+<div class="space-y-1">
+  {% if chats|length == 0 %}
+    <div class="text-zinc-500 text-sm px-2 py-4">
+      No chats yet. Click “New chat”.
+    </div>
+  {% endif %}
+
+  {% for c in chats %}
+    <a
+      href="/app?chat_id={{ c.id }}"
+      class="block px-3 py-2 rounded-xl border
+             {% if c.id == current_chat_id %} border-zinc-600 bg-zinc-900 {% else %} border-zinc-900 hover:border-zinc-700 hover:bg-zinc-900/40 {% endif %}"
+      hx-get="/partials/chat/{{ c.id }}"
+      hx-target="#chat-pane-wrapper"
+      hx-swap="innerHTML"
+      hx-push-url="/app?chat_id={{ c.id }}"
+    >
+      <div class="text-sm font-medium truncate">{{ c.title }}</div>
+      <div class="text-xs text-zinc-500 truncate">Click to open</div>
+    </a>
+  {% endfor %}
+</div>

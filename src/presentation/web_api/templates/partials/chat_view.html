@@ -1,0 +1,74 @@
+<div id="chat-pane" class="h-full flex flex-col">
+
+  <!-- messages -->
+  <div data-chat-scroll class="flex-1 overflow-y-auto p-6 space-y-3">
+    {% for m in messages %}
+      {% if m.role == "user" %}
+        <div class="flex justify-end">
+          <div class="max-w-[78%] rounded-2xl px-4 py-2 bg-white text-zinc-900">
+            {{ m.text }}
+          </div>
+        </div>
+      {% else %}
+        <div class="flex justify-start">
+          <div class="max-w-[78%] rounded-2xl px-4 py-2
+            {% if m.kind == 'question' %} bg-zinc-900 border border-zinc-800 {% endif %}
+            {% if m.kind == 'feedback' %} bg-emerald-950/40 border border-emerald-900 {% endif %}
+            {% if m.kind == 'info' %} bg-zinc-900/50 border border-zinc-800 {% endif %}
+          ">
+            {% if m.kind == "question" %}
+              <div class="text-sm text-zinc-400 mb-1">Question</div>
+            {% elif m.kind == "feedback" %}
+              <div class="text-sm text-zinc-400 mb-1">Feedback</div>
+            {% endif %}
+            <div class="whitespace-pre-wrap">{{ m.text }}</div>
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <!-- choices -->
+  <div class="border-t border-zinc-800 p-4">
+    {% if choices and choices|length > 0 %}
+      <div class="flex flex-wrap gap-2">
+        {% for c in choices %}
+          <form
+            hx-post="/chat/{{ chat_id }}/choose"
+            hx-target="#chat-pane"
+            hx-swap="outerHTML"
+            class="inline"
+          >
+            <input type="hidden" name="choice_id" value="{{ c.id }}">
+            <button
+              type="submit"
+              class="rounded-xl bg-white text-zinc-900 font-semibold px-4 py-2 hover:bg-zinc-200 transition"
+            >
+              {{ c.label }}
+            </button>
+          </form>
+        {% endfor %}
+      </div>
+      <div class="text-xs text-zinc-500 mt-3">
+        Input is disabled (buttons-only flow).
+      </div>
+    {% else %}
+      <div class="text-sm text-zinc-500">
+        No actions available. Chat is inactive.
+      </div>
+    {% endif %}
+
+    <!-- future input (disabled) -->
+    <div class="mt-4 flex gap-2">
+      <input
+        disabled
+        class="flex-1 rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-zinc-500"
+        placeholder="Input disabled (future feature)"
+      />
+      <button disabled class="rounded-xl px-4 py-2.5 bg-zinc-800 text-zinc-500">
+        Send
+      </button>
+    </div>
+  </div>
+
+</div>
