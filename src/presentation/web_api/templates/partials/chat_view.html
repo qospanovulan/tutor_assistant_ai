@@ -1,6 +1,6 @@
 <div id="chat-pane" class="h-full flex flex-col">
 
-  <!-- messages -->
+  <!-- Messages (scrollable) -->
   <div data-chat-scroll class="flex-1 overflow-y-auto p-6 space-y-3">
     {% for m in messages %}
       {% if m.role == "user" %}
@@ -28,8 +28,8 @@
     {% endfor %}
   </div>
 
-  <!-- choices -->
-  <div class="border-t border-zinc-800 p-4">
+  <!-- Bottom actions (fixed at bottom) -->
+  <div class="shrink-0 border-t border-zinc-800 bg-zinc-950/80 backdrop-blur p-4">
     {% if choices and choices|length > 0 %}
       <div class="flex flex-wrap gap-2">
         {% for c in choices %}
