@@ -8,7 +8,8 @@ from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-# from adapters.auth.token import JwtTokenProcessor
+from adapters.auth.token import JwtTokenProcessor
+from adapters.database.session_db import SessionGateway
 from main.config import load_web_config
 from main.ioc import IoC
 from presentation.interactor_factory import InteractorFactory
@@ -63,19 +64,27 @@ def create_app():
         db_uri=web_config.db_uri,
     )
 
-    # token_processor = JwtTokenProcessor(
-    #     secret=web_config.secret_key,
-    #     expires=timedelta(
-    #         minutes=web_config.access_token_expire_minutes
-    #     ),
-    #     algorithm="HS256",
-    # )
+    token_processor = JwtTokenProcessor(
+        secret=web_config.secret_key,
+        expires=timedelta(
+            minutes=web_config.access_token_expire_minutes
+        ),
+        algorithm="HS256",
+    )
+
+    def session_gateway_provider():
+        session = ioc.session_factory()
+        try:
+            yield SessionGateway(session)
+        finally:
+            session.close()
 
 
     app.dependency_overrides.update({
         InteractorFactory: singleton(ioc),
         WebViewConfig: web_view_config_provider,
-        # JwtTokenProcessor: singleton(token_processor),
+        JwtTokenProcessor: singleton(token_processor),
+        SessionGateway: session_gateway_provider,
     })
 
     app.add_middleware(

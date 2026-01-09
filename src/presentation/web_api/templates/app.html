@@ -10,7 +10,9 @@
       <div class="flex items-center justify-between gap-2">
         <div>
           <div class="text-sm text-zinc-400">Student</div>
-          <div class="font-semibold">{{ student_name }} • Grade {{ grade }}</div>
+          <div class="font-semibold">
+            {{ student_name }}{% if grade is not none %} • Grade {{ grade }}{% endif %}
+          </div>
         </div>
         <a href="/logout" class="text-zinc-400 hover:text-zinc-200 text-sm">Logout</a>
       </div>

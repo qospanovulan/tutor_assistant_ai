@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Login{% endblock %}
+{% block title %}Student Registration{% endblock %}
 
 {% block content %}
 <div class="min-h-screen flex items-center justify-center px-4">
   <div class="w-full max-w-md bg-zinc-900/60 border border-zinc-800 rounded-2xl shadow-xl p-6">
     <div class="mb-6">
-      <h1 class="text-2xl font-semibold">Student login</h1>
-      <p class="text-zinc-400 mt-1">Use your email and password.</p>
+      <h1 class="text-2xl font-semibold">Student registration</h1>
+      <p class="text-zinc-400 mt-1">Teachers are added manually.</p>
     </div>
 
     {% if error %}
@@ -15,7 +15,17 @@
       </div>
     {% endif %}
 
-    <form method="post" action="/login" class="space-y-4">
+    <form method="post" action="/students/register" class="space-y-4">
+      <div>
+        <label class="block text-sm text-zinc-300 mb-2">Name</label>
+        <input
+          name="name"
+          class="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-3 outline-none focus:ring-2 focus:ring-zinc-600"
+          placeholder="Ulan"
+          required
+        />
+      </div>
+
       <div>
         <label class="block text-sm text-zinc-300 mb-2">Email</label>
         <input
@@ -33,21 +43,34 @@
           type="password"
           name="password"
           class="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-3 outline-none focus:ring-2 focus:ring-zinc-600"
-          placeholder="Your password"
+          placeholder="At least 6 characters"
           required
         />
+      </div>
+
+      <div>
+        <label class="block text-sm text-zinc-300 mb-2">Grade</label>
+        <select
+          name="grade"
+          class="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-3 outline-none focus:ring-2 focus:ring-zinc-600"
+          required
+        >
+          {% for g in range(1, 12) %}
+            <option value="{{ g }}">{{ g }}</option>
+          {% endfor %}
+        </select>
       </div>
 
       <button
         type="submit"
         class="w-full rounded-xl bg-white text-zinc-900 font-semibold py-3 hover:bg-zinc-200 transition"
       >
-        Continue →
+        Create account →
       </button>
     </form>
 
     <div class="mt-4 text-sm text-zinc-400">
-      New student? <a class="text-white hover:underline" href="/students/register">Create an account</a>
+      Already have a session? <a class="text-white hover:underline" href="/login">Go to login</a>
     </div>
   </div>
 </div>

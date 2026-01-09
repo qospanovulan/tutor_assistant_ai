@@ -5,9 +5,19 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from typing_extensions import Annotated
+
+from application.common.id_provider import IdProvider
+from application.login_student import LoginStudentCommand
+from application.register_student import RegisterStudentCommand
+from domain.exceptions.auth import AuthenticationError, RegistrationError
+from domain.models.user import User
+from presentation.interactor_factory import InteractorFactory
+from presentation.web_api.dependencies.depends_stub import Stub
+from presentation.web_api.dependencies.id_provider import session_id_provider
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -45,10 +55,33 @@ def _get_session_key(request: Request) -> str | None:
 
 def _require_session_key(request: Request) -> str:
     sk = _get_session_key(request)
-    if not sk or sk not in _SESSIONS:
-        # No session cookie => redirect to login
+    if not sk:
         raise RuntimeError("NO_SESSION")
     return sk
+
+
+def _ensure_chat_state(session_key: str, user: User) -> None:
+    grade = user.student_profile.grade if user.student_profile else None
+    _SESSIONS.setdefault(
+        session_key,
+        {
+            "name": user.full_name or user.email,
+            "grade": grade,
+            "chat_ids": [],
+        },
+    )
+
+
+def _require_authenticated_session(
+    request: Request,
+    id_provider: IdProvider,
+    ioc: InteractorFactory,
+) -> tuple[str, User]:
+    session_key = _require_session_key(request)
+    with ioc.authenticate(id_provider) as authenticate:
+        user = authenticate(None)
+    _ensure_chat_state(session_key, user)
+    return session_key, user
 
 
 def _render_login(request: Request, error: str | None = None) -> HTMLResponse:
@@ -59,11 +92,19 @@ def _render_login(request: Request, error: str | None = None) -> HTMLResponse:
     )
 
 
+def _render_register(request: Request, error: str | None = None) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "register.html",
+        {"request": request, "error": error},
+        status_code=200,
+    )
+
+
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     # If already logged in => go to app
     sk = _get_session_key(request)
-    if sk and sk in _SESSIONS:
+    if sk:
         return RedirectResponse("/app", status_code=303)
     return _render_login(request)
 
@@ -71,21 +112,79 @@ def login_page(request: Request):
 @router.post("/login")
 def login_submit(
     request: Request,
-    name: str = Form(...),
-    grade: int = Form(...),
+    ioc: Annotated[InteractorFactory, Depends(Stub(InteractorFactory))],
+    email: str = Form(...),
+    password: str = Form(...),
 ):
-    name = name.strip()
-    if not name:
-        return _render_login(request, error="Name is required.")
+    try:
+        with ioc.login_student() as login_student:
+            result = login_student(
+                LoginStudentCommand(
+                    email=email,
+                    password=password,
+                )
+            )
+    except AuthenticationError as exc:
+        return _render_login(request, error=str(exc))
 
-    # Create session + cookie
-    sk = str(uuid4())
-    _SESSIONS[sk] = {"name": name, "grade": grade, "chat_ids": []}
+    _SESSIONS[result.session_key] = {
+        "name": result.full_name,
+        "grade": result.grade,
+        "chat_ids": [],
+    }
 
     resp = RedirectResponse("/app", status_code=303)
     resp.set_cookie(
         "session_key",
-        sk,
+        result.session_key,
+        httponly=True,
+        samesite="lax",
+        secure=False,  # set True behind HTTPS
+        max_age=60 * 60 * 24 * 30,  # 30 days
+    )
+    return resp
+
+
+@router.get("/students/register", response_class=HTMLResponse)
+def student_register_page(request: Request):
+    sk = _get_session_key(request)
+    if sk:
+        return RedirectResponse("/app", status_code=303)
+    return _render_register(request)
+
+
+@router.post("/students/register")
+def student_register_submit(
+    request: Request,
+    ioc: Annotated[InteractorFactory, Depends(Stub(InteractorFactory))],
+    name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    grade: int = Form(...),
+):
+    try:
+        with ioc.register_student() as register_student:
+            result = register_student(
+                RegisterStudentCommand(
+                    full_name=name,
+                    email=email,
+                    password=password,
+                    grade=grade,
+                )
+            )
+    except RegistrationError as exc:
+        return _render_register(request, error=str(exc))
+
+    _SESSIONS[result.session_key] = {
+        "name": result.full_name,
+        "grade": result.grade,
+        "chat_ids": [],
+    }
+
+    resp = RedirectResponse("/app", status_code=303)
+    resp.set_cookie(
+        "session_key",
+        result.session_key,
         httponly=True,
         samesite="lax",
         secure=False,  # set True behind HTTPS
@@ -96,16 +195,24 @@ def login_submit(
 
 @router.get("/logout")
 def logout(request: Request):
+    sk = _get_session_key(request)
+    if sk:
+        _SESSIONS.pop(sk, None)
     resp = RedirectResponse("/login", status_code=303)
     resp.delete_cookie("session_key")
     return resp
 
 
 @router.get("/app", response_class=HTMLResponse)
-def app_shell(request: Request, chat_id: str | None = None):
+def app_shell(
+    request: Request,
+    id_provider: Annotated[IdProvider, Depends(session_id_provider)],
+    ioc: Annotated[InteractorFactory, Depends(Stub(InteractorFactory))],
+    chat_id: str | None = None,
+):
     try:
-        sk = _require_session_key(request)
-    except RuntimeError:
+        sk, _user = _require_authenticated_session(request, id_provider, ioc)
+    except (RuntimeError, AuthenticationError):
         return RedirectResponse("/login", status_code=303)
 
     # pick current chat
@@ -127,10 +234,15 @@ def app_shell(request: Request, chat_id: str | None = None):
 # Partials (HTMX)
 # ----------------------------
 @router.get("/partials/chats", response_class=HTMLResponse)
-def partial_chats_list(request: Request, current_chat_id: str | None = None):
+def partial_chats_list(
+    request: Request,
+    id_provider: Annotated[IdProvider, Depends(session_id_provider)],
+    ioc: Annotated[InteractorFactory, Depends(Stub(InteractorFactory))],
+    current_chat_id: str | None = None,
+):
     try:
-        sk = _require_session_key(request)
-    except RuntimeError:
+        sk, _user = _require_authenticated_session(request, id_provider, ioc)
+    except (RuntimeError, AuthenticationError):
         return RedirectResponse("/login", status_code=303)
 
     chats = []
@@ -149,8 +261,15 @@ def partial_chats_list(request: Request, current_chat_id: str | None = None):
 
 
 @router.post("/chat/new", response_class=HTMLResponse)
-def create_chat(request: Request):
-    sk = _require_session_key(request)
+def create_chat(
+    request: Request,
+    id_provider: Annotated[IdProvider, Depends(session_id_provider)],
+    ioc: Annotated[InteractorFactory, Depends(Stub(InteractorFactory))],
+):
+    try:
+        sk, _user = _require_authenticated_session(request, id_provider, ioc)
+    except (RuntimeError, AuthenticationError):
+        return RedirectResponse("/login", status_code=303)
 
     cid = str(uuid4())
     title = f"Chat #{len(_SESSIONS[sk]['chat_ids']) + 1}"
@@ -207,10 +326,15 @@ def create_chat(request: Request):
 
 
 @router.get("/partials/chat/{chat_id}", response_class=HTMLResponse)
-def partial_chat_view(request: Request, chat_id: str):
+def partial_chat_view(
+    request: Request,
+    chat_id: str,
+    id_provider: Annotated[IdProvider, Depends(session_id_provider)],
+    ioc: Annotated[InteractorFactory, Depends(Stub(InteractorFactory))],
+):
     try:
-        sk = _require_session_key(request)
-    except RuntimeError:
+        sk, _user = _require_authenticated_session(request, id_provider, ioc)
+    except (RuntimeError, AuthenticationError):
         return RedirectResponse("/login", status_code=303)
 
     if chat_id not in _SESSIONS[sk]["chat_ids"]:
@@ -249,10 +373,16 @@ def partial_chat_view(request: Request, chat_id: str):
 
 
 @router.post("/chat/{chat_id}/choose", response_class=HTMLResponse)
-def choose(request: Request, chat_id: str, choice_id: str = Form(...)):
+def choose(
+    request: Request,
+    chat_id: str,
+    id_provider: Annotated[IdProvider, Depends(session_id_provider)],
+    ioc: Annotated[InteractorFactory, Depends(Stub(InteractorFactory))],
+    choice_id: str = Form(...),
+):
     try:
-        sk = _require_session_key(request)
-    except RuntimeError:
+        sk, _user = _require_authenticated_session(request, id_provider, ioc)
+    except (RuntimeError, AuthenticationError):
         return RedirectResponse("/login", status_code=303)
 
     if chat_id not in _SESSIONS[sk]["chat_ids"]:
